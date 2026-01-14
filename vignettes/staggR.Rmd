@@ -1,0 +1,493 @@
+---
+title: "staggR"
+output: rmarkdown::html_vignette
+bibliography: references.bib
+csl: american-medical-association.csl
+vignette: >
+  %\VignetteIndexEntry{staggR}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+collapse = TRUE,
+comment = "#>"
+)
+
+# Check for sandwich package
+if (!requireNamespace("sandwich", quietly = TRUE)) {
+stop("Package 'sandwich' needed for this vignette to work. Please install it.")
+}
+```
+
+staggR: Fit difference-in-differences models with staggered interventions
+=====================
+
+The `staggR` package fits linear difference-in-differences models in scenarios where intervention roll-outs are
+staggered over time.  The package implements a version of an approach proposed by Sun and Abraham @sun2021did to
+estimate cohort- and time-since-treatment specific difference-in-differences parameters. This package provides an
+alternative approach that proceeds in two steps:
+
+1. Estimate a difference-in-differences regression with cohort- and (calendar) time-specific parameters;
+
+2. Translate difference-in-differences estimates into average estimates for arbitrary time periods relative to the intervention (e.g., post-intervention period).
+
+By separating these two steps, we provide an easy-to-implement, transparent, intuitive difference-in-differences
+framework.
+
+# Background
+
+Consider a scenario with $i=1,...,N$ units and $t=1,...,T$ periods. Units are exposed to the intervention at different
+times. We group units having the intervention during the same time period into cohorts, which we denote by $c=1,...,C$.
+To simplify the notation, we assume that units in cohort $c=1$ are exposed to treatment at time $t=1$, etc. Units
+exposed to the intervention at time $t>T$ form the comparison group because they are not exposed to the intervention
+during the study period.
+
+Abraham and Sun's difference-in-differences specification interacts cohort indicators with time indicators relative to
+intervention exposure start, and might be written as follows:
+
+$$
+y_{it} = \alpha_c D_c + \beta_t D_t + \left(\sum_c \sum_{l\neq -1} \gamma_{cl} D_c \cdot D^l_{it}\right) + \psi X_{it} + \varepsilon_{st},
+$$
+
+where $D_c$ are cohort indicators equal to one if unit $i$ is in cohort $c$ and zero otherwise, $D_t$ are time
+indicators, and $D^l_{it}$ are indicators equal to one if unit $i$ is $l$ periods away from initial intervention
+exposure, $X_{it}$ are covariates, and $\varepsilon_{st}$ is the error term. The last pre-intervention period $l=-1$
+is omitted to ensure identification. The parameters $\gamma_{cl}$ measure difference-in-differences estimates for a
+cohort $c$ and time since intervention $l$.
+
+Our approach recognizes the following relationship between time since intervention $l$ and time $t$, which was also
+noted by Sun and Abraham:
+
+$$
+l = t-c 
+$$
+
+For instance, time $t=2$ for cohort $c=3$ is $l=-1$, i.e., the last period prior to intervention exposure,
+because intervention exposure for cohort $c$ is $t=3$.
+
+Using this insight, the difference-in-differences regression can alternatively be stated as follows:
+
+$$
+y_{it} = \alpha_c D_c + \beta_t D_t + \left(\sum_c \sum_{t\neq (c-1)} \gamma_{ct} D_c \cdot D_t\right) + \psi X_{it} + \varepsilon_{st}.
+$$
+
+Using this specification has two advantages:
+
+1. It clarifies that this staggered difference-in-differences method is a generalization of the basic
+difference-in-differences design with two periods (a pre-intervention and a post-intervention period) and two cohorts (a
+treatment group and a comparison group).  In that setting, the indicator for the post-intervention period measures the
+change between the pre- and post-intervention period for the comparison group, and the difference-in-differences
+estimate measures the
+differential change between the pre- and post-intervention period for the treatment group.
+
+The above equation preserves this structure, while showing how it is a more general version of the
+difference-in-differences design. Specifically, parameters $\beta_t$ measure changes over time for the comparison
+group, which now can include multiple periods; and parameters $\gamma_{ct}$ measure differential changes, but for
+multiple treatment cohorts instead of just one treatment group, and for multiple periods instead of just one.
+
+2. It can be easily implemented in R (or other statistical programs) because it does not require constructing
+cohort-specific time-since-intervention indicators $D^l_{it}$. Instead, it uses cohort and time indicators and the
+interaction between the two. 
+
+This packages provides functions to estimate such a difference-in-differences specification. It also provides functions
+to translate difference-in-differences estimates into quantities that are useful for research purposes. For instance,
+users can calculate average difference-in-differences estimates for each period relative to intervention exposure, or
+they can calculate the average difference-in-differences estimates for the full post-intervention period. The
+`ave_coeff()` function accomplishes this by calculating averages of user-specified sets of regression coefficients and
+combining the corresponding standard errors using the estimated variance–covariance matrix, whose calculation method
+users can also specify. This aggregation yields a single estimate that properly accounts for sampling variability and
+the correlation among underlying event-study coefficients.
+
+# Example using simulated data
+
+## Explore data
+
+Consider as a didactic example a policy intervention designed to reduce inpatient hospitalizations in 15 counties. This
+longitudinal data set contains one row per individual-year. Each individual in the data set is identified by a globally
+unique identifier (`guid`), and we have measures of the individuals' ages, sexes, and comorbidities, and an indicator
+showing whether the individual was hospitalized during the current year. Each individual resides in a county, which
+itself is grouped into cohorts based on intervention year. Finally, the `yr` column indicates the year of the current
+observation.
+
+<div style="overflow-x: auto; width: 100%;">
+
+```{r setup}
+data("hosp", package = "staggR")
+head(hosp, 20)
+```
+</div> 
+
+The county is never exposed to the intervetnion if `intervention_yr` is `NA`. Among the 15 counties in the data set, 3
+counties implemented the intervention in 2015; 2 counties implemented in 2016; 5 counties implemented in 2017; 1 county
+implemented in 2018; and 4 counties did not implement the intervention at all during the study period.
+
+```{r}
+with(hosp,
+     table(county, intervention_yr, useNA = "ifany"))
+```
+
+Counties are organized into cohorts by intervention year, i.e., counties with the same intervention year are assigned to
+the same cohort.
+
+```{r}
+county_cohorts <- unique(hosp[, c("county", "cohort", "intervention_yr")])
+county_cohorts[order(county_cohorts$cohort), ]
+```
+
+The study period includes 11 years, from 2010 through 2020. Hospitalizations occurs in every county-year. 
+
+```{r}
+stats::xtabs(hospitalized ~ county + yr, 
+             data = hosp)
+```
+
+### Visualize hospitalization trends
+
+To visualize trends in the proportion of individuals who were hospitalized over time, we can call the function
+`ts_plot()`, which takes, at minimum, 3 arguments: a formula, in the format `outcome ~ group + time_var`, the source data set, and the name of the column that contains the time period during which each group implemented the intervention.
+
+```{r tsplot, fig.width = 10, fig.height = 10, out.width = "100%"}
+staggR::ts_plot(hospitalized ~ county + yr,
+                df = hosp,
+                intervention_var = "intervention_yr")
+``` 
+
+Equivalently, we can specify the outcome, group, and time variable using the parameters `y`, `group`, and `time_var`. 
+
+```{r tsplot_alt, fig.width = 10, fig.height = 10, out.width = "100%"}
+staggR::ts_plot(y = "hospitalized",
+                group = "county",
+                time_var = "yr",
+                df = hosp,
+                intervention_var = "intervention_yr")
+```
+
+While this visualization is helpful, it excludes counties that did not implement the intervention. This is because the
+function `ts_plot()` omits any counties where any of `y`, `group`, `time_var`, (or our formula equivalent, `hospitalized ~ county + yr`) or the `intervention_var` are `NA`.
+
+```{r}
+table(hosp$hospitalized, useNA = "always")
+table(hosp$county, useNA = "always")
+table(hosp$yr, useNA = "always")
+table(hosp$intervention_yr, useNA = "always")
+```
+
+We can add these counties to the plot if we change `NA`s in `intervention_yr` to some other string value.
+
+```{r tsplot2, fig.width = 10, fig.height = 10, out.width = "100%"}
+hosp2 <- hosp
+hosp2$intervention_yr <- ifelse(is.na(hosp2$intervention_yr),
+                                yes = "Comparison group",
+                                no = hosp2$intervention_yr)
+county_plot <- staggR::ts_plot(hospitalized ~ county + yr,
+                               df = hosp2,
+                               intervention_var = "intervention_yr")
+county_plot
+```
+
+It might be easier to compare the panels in this plot if the X axes were all aligned at the point of intervention. We
+can accomplish this by passing a time-since-intervention (`tsi`) object to `ts_plot()`. We create a `tsi` object by
+passing the `hosp2` data set to the `id_tsi()` function, and we identify the names of the columns that contain
+intervention cohorts, time periods, and the time period during which each cohort implemented the intervention. The
+returned `tsi` object contains a data frame, which includes columns `cohort`, `time`, `intervention_time`, and
+`tsi`. Each row corresponds to a unique county-time period. The `tsi` column contains an integer that tells us how many
+time periods the corresponding time period is away from the intervention. For example, Ashbrook County belongs to cohort
+5, which means the intervention took place in 2015. If we examine the first row of the `tsi` object, we'll see that the
+time period 2010 is 5 time periods prior to the intervention, so `tsi` has a value of -5. Values of `tsi` are negative
+before the intervention, 0 during the year of intervention, and positive for the years following the intervention.
+
+```{r}
+hosp_tsi <- staggR::id_tsi(df = hosp2,
+                           cohort_var = "county",
+                           time_var = "yr",
+                           intervention_var = "intervention_yr")
+head(hosp_tsi$data, 11)
+```
+
+Now we can pass `hosp_tsi` to `ts_plot()` to generate a set of plots with time since intervention on the X axis instead of years. 
+
+```{r tsplot3, fig.width = 10, fig.height = 10, out.width = "100%"}
+county_plot <- staggR::ts_plot(hospitalized ~ county + yr,
+                               df = hosp2,
+                               intervention_var = "intervention_yr", 
+                               tsi = hosp_tsi)
+county_plot
+```
+
+We might like to customize this plot a little bit and use better labels for the X and Y axes. The function `ts_plot()`
+returns a `ggplot` object, so we can append any `ggplot2` functions to customize the plot.
+
+```{r tsplot4, fig.width = 10, fig.height = 10, out.width = "100%"}
+library(ggplot2)
+county_plot +
+  scale_x_continuous(name = "Years", 
+                     breaks = seq(-8, 5, by = 2)) +
+  scale_y_continuous(name = "Percent hospitalized",
+                     breaks = seq(0, 1, by = 0.2),
+                     labels = function(x) paste0(round(x * 100), "%")) +
+  theme_classic() +
+  theme(panel.grid.major.x = element_line(linewidth = 0.5))
+```
+
+## Fit a difference-in-differences regression model 
+
+Now that we have some familiarity with the data, we can fit a staggered difference-in-differences model. The function
+for estimating such a model is called `sdid()`. 
+
+The first argument of the function is the regression formula. The order of terms in the regression formula is important:
+`sdid()` will assume that the first term on the right-hand side of the formula is the variable that identifies cohorts,
+and the second term is the variable that identifies the time period for each observation. All remaining terms on the
+right-hand side of the formula are covariates that we would like to use to adjust our model. The dependent variable is
+on the left-hand side of the formula.
+
+Other important parameters include `intervention_var`, which specifies the name of the column that contains the time
+period during which each cohort implemented the intervention (in our case, this is `intervention_yr`), and `df`, which specifies the data set. 
+
+The call for estimating the staggered difference-in-differences regression, adjusting for age, sex, and comorbitiy, 
+is as follows:
+
+```{r}
+sdid_hosp <- staggR::sdid(hospitalized ~ cohort + yr + age + sex + comorb,
+                          df = hosp,
+                          intervention_var  = "intervention_yr")
+
+summary(sdid_hosp)
+```
+
+Although we supplied a formula to fit this model, it is important to recognize that this formula is specified according
+to a convenience syntax, which assumes that we want to fit a Sun and Abraham-style staggered difference-in-differences
+model, rather than the very simple model implied by our formula. If we would like to see the formula passed to `lm()` to
+fit the staggered difference-in-differences model, we can examine the components of the `sdid_hosp` object.
+
+```{r}
+names(sdid_hosp)
+sdid_hosp$formula
+```
+
+Here we see both the `supplied` and `fitted` formulas. The `fitted` formula includes main effects for each cohort, time
+periods, and interaction terms for each cohort-time period combination. You might notice that these terms do not exist
+in our supplied data.frame; this is because `sdid()` calls `prep_data()` to create all necessary dummy variables. These
+are needed because we have to be very explicit about which levels of each cohort and time period variable are used as
+referents in the model, and these referent levels differ for main effects and for each set of interaction terms.
+
+By default, `sdid()` assumes that the first observed levels of both the cohort column and the time-period column should
+function as the referents for the main effects. This is the same as with `lm()` and most other modeling functions in
+R. For the long list of cohort-time period interactions, however, `sdid()` assumes that the time period immediately
+preceding the intervention time period (defined by `intervention_var`) should be the referent. In our example, that
+means that the interaction terms for `cohort_5` should omit 2014 as the referent time period, because that cohort's
+intervention took place in 2015. Similarly, the interaction terms for `cohort_6` should omit 2015 as the referent time
+period, because that cohort's intervention took place in 2016. Indeed, we observe that the formula has interaction terms
+`cohort_5:yr_2010` through `cohort_5:yr_2020`, with `cohort_5_2014` omitted for identification.
+
+We can use the `cohort_time_refs` parameter to specify a different time period to function as the referent for
+cohort-time interactions:
+
+```{r}
+sdid_hosp_earlier_timeref <- staggR::sdid(hospitalized ~ cohort + yr + age + sex + comorb,
+                                          df = hosp,
+                                          cohort_time_refs = list(`5` = "2013",
+                                                                  `6` = "2014",
+                                                                  `7` = "2015",
+                                                                  `8` = "2016"),
+                                          intervention_var  = "intervention_yr")
+```
+
+We can now proceed with the second, post-estimation step: translating difference-in-differences estimates into average estimates.
+
+## Calculating coefficient averages
+
+Before we can calculate coefficient averages, we first need to identify the coefficients we want to combine. We do this by supplying the `sdid` object and either "pre" or "post" to the `select_period()` function to retrieve the coefficients for interaction terms corresponding to the pre-intervention or post-intervention periods, respectively. 
+
+```{r}
+# Identify the coefficients that compose the effect of the intervention during the 
+# post-intervention period
+(post_coefs <- staggR::select_period(sdid = sdid_hosp, 
+                                     period = "post"))
+```
+
+Now that we've identified the coefficients of interest, we will pass the `sdid` object and the selected coefficients to the `ave_coeff()` function, which calculates averages of any specified set of regression coefficients, along with the corresponding standard errors. 
+
+To demonstrate how this function works, we first calculate the average effect of the intervention during the
+post-intervention period.
+
+```{r}
+staggR::ave_coeff(sdid = sdid_hosp,
+                  coefs = post_coefs)
+```
+
+The result shows that the intervention is associated with an increase in the probability of hospitalization. 
+
+Next, we can use the `ave_coeff()` function to examine whether the risk of hospitalization differs by treatment group during the pre-intervention period. For that, we pass "pre" to the `period` argument, as follows:
+
+```{r}
+# Identify the coefficients that represent the difference between exposure groups 
+# during the pre-intervention period
+(pre_coefs <- staggR::select_period(sdid = sdid_hosp, 
+                                    period = "pre"))
+
+staggR::ave_coeff(sdid = sdid_hosp,
+                  coefs = pre_coefs)
+```
+
+Here we see risk of hospitalization during the pre-intervention period does not significantly differ by intervention status. 
+
+We can also examine whether there exists heterogeneity in difference-in-differences
+estimates between various cohorts, using the `cohorts` parameter in the `select_period()` function. For instance, we could calculate the average of difference-in-differences estimates for the post-intervention period for cohorts 5 and 6.
+
+```{r}
+# Identify the coefficients for the effect of the intervention on cohorts 5 and 6 
+# during the post-intervention period
+(post_coefs_cohort5 <- staggR::select_period(sdid = sdid_hosp, 
+                                             period = "post",
+                                             cohorts = c("5", "6")))
+
+staggR::ave_coeff(sdid = sdid_hosp,
+                  coefs = post_coefs_cohort5)
+
+```
+
+We can similarly calculate the average of difference-in-differences estimates for the post-intervention period for
+cohorts 7 and 8.
+
+```{r}
+# Identify the coefficients for the effect of the intervention on cohorts 7 and 8 
+# during the post-intervention period
+(post_coefs_cohort8 <- staggR::select_period(sdid = sdid_hosp, 
+                                             period = "post",
+                                             cohorts = c("7", "8")))
+
+staggR::ave_coeff(sdid = sdid_hosp,
+                  coefs = post_coefs_cohort8)
+```
+
+Comparing these averages shows that the association between the intervention and probability of
+hospitalization for the last two cohorts is almost twice as large compared to the first two cohorts.
+
+If we want to aggregate a set of coefficients other than those for the pre- or post-intervention periods, we select our coefficients using `select_terms()` instead of `select_period()`. We supply a named list containing values for `cohorts` and either `times` or `tsi`. The `cohorts` element should contain a character vector of cohorts; if we omit the `cohorts` element, the function will select all available cohorts. The `times` element contains a character vector of time periods as they are recorded in the time variable supplied to `sdid()`. If we would prefer to select time periods relative to the intervention period, we would instead use the `tsi` element, which contains a vector of integers representing the number of units of time relative to each cohort's intervention. 
+
+For example, we could calculate the added risk of hospitalization associated with the intervention across all cohorts for the year 2018.
+
+```{r}
+# Identify the coefficients corresponding to all cohorts in 2018
+(terms_2018 <- staggR::select_terms(sdid = sdid_hosp,
+                                    selection = list(times = "2018")))
+```
+
+Then we can pass the selected terms to the `ave_coeff()` function to aggregate the 2018 effect across all cohorts.
+
+```{r}
+staggR::ave_coeff(sdid = sdid_hosp,
+                  coefs = terms_2018)
+```
+
+If we are interested in the added risk of hospitalization associated with the intervention in the year 2018, but only for the first two cohorts (5 and 6), we could include a `cohorts` element in the `selection` list.
+
+```{r}
+(terms_2018_cohorts56 <- staggR::select_terms(sdid = sdid_hosp,
+                                              selection = list(cohorts = c("5", "6"),
+                                                               times = "2018")))
+
+staggR::ave_coeff(sdid = sdid_hosp,
+                  coefs = terms_2018_cohorts56)
+```
+
+Alternatively, if we already know exactly which coefficients we want to aggregate, we can simply list them in the `coefs` argument. 
+
+```{r}
+(terms_custom <- staggR::select_terms(sdid = sdid_hosp,
+                                      coefs = c("cohort_5:yr_2018", "cohort_6:yr_2018")))
+
+staggR::ave_coeff(sdid = sdid_hosp,
+                  coefs = terms_custom)
+```
+
+### Calculating custom standard errors
+
+Because outcomes within the same unit (in our case, county) are often correlated over time, assuming independent errors
+could understate uncertainty. Clustering standard errors allows for correlation within clusters while maintaining
+independence across them. Following Sun and Abraham @sun2021did, we can supply a custom variance–covariance function to
+compute standard errors clustered at the county level.
+
+```{r}
+# Fit SDID model with standard errors clustered at the county level
+sdid_hosp <- staggR::sdid(hospitalized ~ cohort + yr + age + sex + comorb,
+                               df = hosp,
+                               intervention_var  = "intervention_yr",
+                               .vcov = sandwich::vcovCL,
+                               cluster = hosp$county)
+summary(sdid_hosp)
+
+# Examine the association between the intervention and risk of hospitalization in 
+# the post-intervention period
+staggR::ave_coeff(sdid = sdid_hosp, 
+                  coefs = staggR::select_period(sdid = sdid_hosp,
+                                                period = "post"))
+```
+
+
+### Using aggregated data 
+
+Data sets containing staggered interventions can sometimes be very large, so it might be preferable to fit the model
+using aggregated data. To this end, we created an alternate version of the data set that has been aggregated to the
+county-year level.
+
+```{r}
+data("hosp_agg", package = "staggR")
+head(hosp_agg)
+
+# This data set contains one row per county-year
+nrow(hosp_agg); nrow(unique(hosp_agg[,c("yr", "county")]))
+```
+
+As before, we can use the function `sdid()` to fit the difference-in-differences regression model. The regression formula
+now uses the variable representing the percent of hospitalized individuals in each county-year (`pct_hospitalized`) as
+the dependent variable, and the covariates have been aggregated (i.e., `mean_age`, `pct_fem`, and `pct_cmb`). The
+main difference is that we need to specify the `weights` argument for the number of observations contained within each
+row of the data set, which is represented by the `n_enr` column. 
+
+```{r}
+sdid_hosp_agg <- staggR::sdid(pct_hospitalized ~ cohort + yr + mean_age + pct_fem + pct_cmb,
+                              df = hosp_agg,
+                              weights = "n_enr",
+                              intervention_var  = "intervention_yr",
+                              # Cluster standard errors at the county level
+                              .vcov = sandwich::vcovCL,
+                              cluster = hosp_agg$county)
+```
+
+Aggregating means that we decoupled values of these covariates from outcomes within county-years, so coefficients are
+slightly different but substantially similar compared to the regression using individual-level data. We can examine differences between models by summarizing them, as we would with a `lm` or `glm` model.
+
+```{r}
+# Summarize the original model
+summary(sdid_hosp)
+
+# Summarize the model based on aggregated data
+summary(sdid_hosp_agg)
+```
+
+If we would like to compare the two models' estimates of risk of hospitalization associated with the intervention during the post-intervention period, we can use `ave_coeff()` again. 
+
+```{r}
+# Summarize the post-intervention period from the original model
+summary_sdid_hosp <- 
+  staggR::ave_coeff(sdid = sdid_hosp, 
+                    coefs = staggR::select_period(sdid = sdid_hosp,
+                                                  period = "post"))
+
+
+# # Summarize the post-intervention period from the model fitted using aggregated data
+summary_sdid_hosp_agg <- 
+  staggR::ave_coeff(sdid = sdid_hosp_agg, 
+                    coefs = staggR::select_period(sdid = sdid_hosp_agg,
+                                                  period = "post"))
+
+# Combine the two summaries
+summary_sdid_hosp$model <- "Individual-level data"
+summary_sdid_hosp_agg$model <- "Aggregated data"
+rbind(summary_sdid_hosp, summary_sdid_hosp_agg)
+```
+
+# References
