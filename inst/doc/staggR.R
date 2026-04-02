@@ -165,10 +165,10 @@ staggR::ave_coeff(sdid = sdid_hosp,
 ## -----------------------------------------------------------------------------
 # Fit SDID model with standard errors clustered at the county level
 sdid_hosp <- staggR::sdid(hospitalized ~ cohort + yr + age + sex + comorb,
-                               df = hosp,
-                               intervention_var  = "intervention_yr",
-                               .vcov = sandwich::vcovCL,
-                               cluster = hosp$county)
+                          df = hosp,
+                          intervention_var  = "intervention_yr",
+                          .vcov = sandwich::vcovCL,
+                          cluster = hosp$county)
 summary(sdid_hosp)
 
 # Examine the association between the intervention and risk of hospitalization in 
@@ -218,4 +218,33 @@ summary_sdid_hosp_agg <-
 summary_sdid_hosp$model <- "Individual-level data"
 summary_sdid_hosp_agg$model <- "Aggregated data"
 rbind(summary_sdid_hosp, summary_sdid_hosp_agg)
+
+## -----------------------------------------------------------------------------
+# First examine the model we fit using the original outcome
+sdid_hosp$formula$supplied
+
+# Calculate de-trending adjustments
+hosp_det <- staggR::detrend(sdid = sdid_hosp,
+                            df = hosp)
+
+# Then refit the same model, substituting the _detrended version of the outcome
+sdid_hosp_det <- staggR::sdid(hospitalized_detrended ~ cohort + yr + age + sex + comorb,
+                              df = hosp_det,
+                              intervention_var = "intervention_yr")
+
+# Organize and present results, comparing them to the non-trend-adjusted model
+original_rslts <- staggR::ave_coeff(sdid = sdid_hosp,
+                                    coefs = staggR::select_period(sdid = sdid_hosp, 
+                                                                  period = "post"))
+original_rslts$model = "Original"
+original_rslts <- original_rslts[, c("model", "est", "se", "pval", "lb", "ub", "n")]
+
+detrend_rslts <- staggR::ave_coeff(sdid = sdid_hosp_det,
+                                   coefs = staggR::select_period(sdid = sdid_hosp_det, 
+                                                                 period = "post"))
+detrend_rslts$model = "Trend-adjusted"
+detrend_rslts <- detrend_rslts[, c("model", "est", "se", "pval", "lb", "ub", "n")]
+
+rbind(original_rslts, detrend_rslts)
+
 

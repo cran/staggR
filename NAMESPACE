@@ -3,6 +3,8 @@
 S3method(print,summary.sdid_mdl)
 S3method(summary,sdid_mdl)
 export(ave_coeff)
+export(detrend)
+export(detrend_factor)
 export(id_tsi)
 export(pick_time_refs)
 export(prep_data)

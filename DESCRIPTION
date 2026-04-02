@@ -2,7 +2,7 @@ Package: staggR
 Type: Package
 Title: Fit Difference-in-Differences Models with Staggered
         Interventions
-Version: 0.1.1
+Version: 0.2.0
 Authors@R: c(person("Kyle", "Hart",
                     email = "hartky@ohsu.edu",
                     role = c("aut", "cre", "cph"),
@@ -27,10 +27,10 @@ Suggests: knitr, rmarkdown, sandwich
 VignetteBuilder: knitr
 Imports: ggplot2 (>= 3.0.0)
 NeedsCompilation: no
-Packaged: 2026-01-09 21:52:06 UTC; hartky
+Packaged: 2026-04-02 13:33:57 UTC; hartky
 Author: Kyle Hart [aut, cre, cph] (ORCID:
     <https://orcid.org/0000-0001-8964-204X>),
   Stephan Lindner [aut]
 Maintainer: Kyle Hart <hartky@ohsu.edu>
 Repository: CRAN
-Date/Publication: 2026-01-14 18:20:02 UTC
+Date/Publication: 2026-04-02 13:50:44 UTC

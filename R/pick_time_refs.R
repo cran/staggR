@@ -28,6 +28,12 @@ pick_time_refs <- function(df, cohort_var, cohort_ref, time_var, intervention_va
   cohort_lvls <- sort(unique(df[[cohort_var]][df[[cohort_var]] != cohort_ref]))
   time_lvls <- sort(unique(df[[time_var]]))
 
+  # Confirm that all non-referent cohort levels have a corresponding intervention time
+  if(!all(!is.na(df[df[[cohort_var]] %in% cohort_lvls, intervention_var]))) {
+    stop(paste0("All levels of `", cohort_var, "` must have a defined value for `", intervention_var, "`."))
+  }
+
+
   # If cohorts are named corresponding to intervention time periods, just use arithmetic to
   # define reference periods for each cohort
   if(all(cohort_lvls %in% time_lvls)) {

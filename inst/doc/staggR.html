@@ -865,7 +865,7 @@ object.</p>
 <span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;     cohort_8:yr_2012 + cohort_8:yr_2013 + cohort_8:yr_2014 + </span></span>
 <span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;     cohort_8:yr_2015 + cohort_8:yr_2016 + cohort_8:yr_2018 + </span></span>
 <span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;     cohort_8:yr_2019 + cohort_8:yr_2020 + age + sex + comorb</span></span>
-<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; &lt;environment: 0x11f44b408&gt;</span></span></code></pre></div>
+<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; &lt;environment: 0x11d3e47a0&gt;</span></span></code></pre></div>
 <p>Here we see both the <code>supplied</code> and <code>fitted</code>
 formulas. The <code>fitted</code> formula includes main effects for each
 cohort, time periods, and interaction terms for each cohort-time period
@@ -1053,10 +1053,10 @@ custom variance–covariance function to compute standard errors clustered
 at the county level.</p>
 <div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Fit SDID model with standard errors clustered at the county level</span></span>
 <span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>sdid_hosp <span class="ot">&lt;-</span> staggR<span class="sc">::</span><span class="fu">sdid</span>(hospitalized <span class="sc">~</span> cohort <span class="sc">+</span> yr <span class="sc">+</span> age <span class="sc">+</span> sex <span class="sc">+</span> comorb,</span>
-<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>                               <span class="at">df =</span> hosp,</span>
-<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>                               <span class="at">intervention_var  =</span> <span class="st">&quot;intervention_yr&quot;</span>,</span>
-<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>                               <span class="at">.vcov =</span> sandwich<span class="sc">::</span>vcovCL,</span>
-<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>                               <span class="at">cluster =</span> hosp<span class="sc">$</span>county)</span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>                          <span class="at">df =</span> hosp,</span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>                          <span class="at">intervention_var  =</span> <span class="st">&quot;intervention_yr&quot;</span>,</span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>                          <span class="at">.vcov =</span> sandwich<span class="sc">::</span>vcovCL,</span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>                          <span class="at">cluster =</span> hosp<span class="sc">$</span>county)</span>
 <span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(sdid_hosp)</span>
 <span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; Supplied formula:</span></span>
@@ -1413,6 +1413,47 @@ post-intervention period, we can use <code>ave_coeff()</code> again.</p>
 <span id="cb28-21"><a href="#cb28-21" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;                   model</span></span>
 <span id="cb28-22"><a href="#cb28-22" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; 1 Individual-level data</span></span>
 <span id="cb28-23"><a href="#cb28-23" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; 2       Aggregated data</span></span></code></pre></div>
+</div>
+<div id="adjusting-for-non-parallel-trends" class="section level3">
+<h3>Adjusting for non-parallel trends</h3>
+<p>A key assumption in any difference-in-differences analysis is that
+the outcome trends among intervention and comparison groups are
+parallel. If examination of the pre-intervention trends does not support
+this assumption, we can adjust outcomes to account for trend
+divergence.</p>
+<p>We start by fitting a staggered DiD model, using the original
+outcomes. In our example, we can borrow the model <code>sdid_hosp</code>
+from above.</p>
+<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="co"># First examine the model we fit using the original outcome</span></span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>sdid_hosp<span class="sc">$</span>formula<span class="sc">$</span>supplied</span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; hospitalized ~ cohort + yr + age + sex + comorb</span></span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Calculate de-trending adjustments</span></span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a>hosp_det <span class="ot">&lt;-</span> staggR<span class="sc">::</span><span class="fu">detrend</span>(<span class="at">sdid =</span> sdid_hosp,</span>
+<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a>                            <span class="at">df =</span> hosp)</span>
+<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-9"><a href="#cb29-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Then refit the same model, substituting the _detrended version of the outcome</span></span>
+<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a>sdid_hosp_det <span class="ot">&lt;-</span> staggR<span class="sc">::</span><span class="fu">sdid</span>(hospitalized_detrended <span class="sc">~</span> cohort <span class="sc">+</span> yr <span class="sc">+</span> age <span class="sc">+</span> sex <span class="sc">+</span> comorb,</span>
+<span id="cb29-11"><a href="#cb29-11" aria-hidden="true" tabindex="-1"></a>                              <span class="at">df =</span> hosp_det,</span>
+<span id="cb29-12"><a href="#cb29-12" aria-hidden="true" tabindex="-1"></a>                              <span class="at">intervention_var =</span> <span class="st">&quot;intervention_yr&quot;</span>)</span>
+<span id="cb29-13"><a href="#cb29-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-14"><a href="#cb29-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Organize and present results, comparing them to the non-trend-adjusted model</span></span>
+<span id="cb29-15"><a href="#cb29-15" aria-hidden="true" tabindex="-1"></a>original_rslts <span class="ot">&lt;-</span> staggR<span class="sc">::</span><span class="fu">ave_coeff</span>(<span class="at">sdid =</span> sdid_hosp,</span>
+<span id="cb29-16"><a href="#cb29-16" aria-hidden="true" tabindex="-1"></a>                                    <span class="at">coefs =</span> staggR<span class="sc">::</span><span class="fu">select_period</span>(<span class="at">sdid =</span> sdid_hosp, </span>
+<span id="cb29-17"><a href="#cb29-17" aria-hidden="true" tabindex="-1"></a>                                                                  <span class="at">period =</span> <span class="st">&quot;post&quot;</span>))</span>
+<span id="cb29-18"><a href="#cb29-18" aria-hidden="true" tabindex="-1"></a>original_rslts<span class="sc">$</span>model <span class="ot">=</span> <span class="st">&quot;Original&quot;</span></span>
+<span id="cb29-19"><a href="#cb29-19" aria-hidden="true" tabindex="-1"></a>original_rslts <span class="ot">&lt;-</span> original_rslts[, <span class="fu">c</span>(<span class="st">&quot;model&quot;</span>, <span class="st">&quot;est&quot;</span>, <span class="st">&quot;se&quot;</span>, <span class="st">&quot;pval&quot;</span>, <span class="st">&quot;lb&quot;</span>, <span class="st">&quot;ub&quot;</span>, <span class="st">&quot;n&quot;</span>)]</span>
+<span id="cb29-20"><a href="#cb29-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-21"><a href="#cb29-21" aria-hidden="true" tabindex="-1"></a>detrend_rslts <span class="ot">&lt;-</span> staggR<span class="sc">::</span><span class="fu">ave_coeff</span>(<span class="at">sdid =</span> sdid_hosp_det,</span>
+<span id="cb29-22"><a href="#cb29-22" aria-hidden="true" tabindex="-1"></a>                                   <span class="at">coefs =</span> staggR<span class="sc">::</span><span class="fu">select_period</span>(<span class="at">sdid =</span> sdid_hosp_det, </span>
+<span id="cb29-23"><a href="#cb29-23" aria-hidden="true" tabindex="-1"></a>                                                                 <span class="at">period =</span> <span class="st">&quot;post&quot;</span>))</span>
+<span id="cb29-24"><a href="#cb29-24" aria-hidden="true" tabindex="-1"></a>detrend_rslts<span class="sc">$</span>model <span class="ot">=</span> <span class="st">&quot;Trend-adjusted&quot;</span></span>
+<span id="cb29-25"><a href="#cb29-25" aria-hidden="true" tabindex="-1"></a>detrend_rslts <span class="ot">&lt;-</span> detrend_rslts[, <span class="fu">c</span>(<span class="st">&quot;model&quot;</span>, <span class="st">&quot;est&quot;</span>, <span class="st">&quot;se&quot;</span>, <span class="st">&quot;pval&quot;</span>, <span class="st">&quot;lb&quot;</span>, <span class="st">&quot;ub&quot;</span>, <span class="st">&quot;n&quot;</span>)]</span>
+<span id="cb29-26"><a href="#cb29-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-27"><a href="#cb29-27" aria-hidden="true" tabindex="-1"></a><span class="fu">rbind</span>(original_rslts, detrend_rslts)</span>
+<span id="cb29-28"><a href="#cb29-28" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt;            model        est         se         pval         lb        ub     n</span></span>
+<span id="cb29-29"><a href="#cb29-29" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; 1       Original 0.10009873 0.01588058 2.895417e-10 0.06897278 0.1312247 11745</span></span>
+<span id="cb29-30"><a href="#cb29-30" aria-hidden="true" tabindex="-1"></a><span class="co">#&gt; 2 Trend-adjusted 0.09767715 0.01398148 2.823971e-12 0.07027346 0.1250808 11745</span></span></code></pre></div>
 </div>
 </div>
 </div>
