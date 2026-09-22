@@ -4,13 +4,32 @@
 \alias{ave_coeff}
 \title{Aggregate a specified set of terms and corresponding standard errors from an sdid model object}
 \usage{
-ave_coeff(sdid, coefs)
+ave_coeff(sdid, coefs, name = "", type = NULL, times = NULL)
 }
 \arguments{
 \item{sdid}{sdid object containing the model to summarize}
 
 \item{coefs}{Character vector containing the names of coefficients to
 aggregate. Can be specified using \code{select_period()} or \code{select_terms()}.}
+
+\item{name}{Name to be supplied in the \code{term} column of the returned data
+frame.}
+
+\item{type}{Optional type of summary the function should provide. Takes
+values \code{es} or \code{calendar}. If left unspecified, the function aggregates the
+coefficients specified in \code{coefs}. If \code{es}, the function returns an
+event-study summary of the times-since-intervention specified in \code{times}. If
+\code{calendar}, the function returns a summary of the calendar time periods
+specified in \code{times.}}
+
+\item{times}{Only used if \code{type} is specified. If \code{type} is \code{es} and \code{times}
+is unspecified, the function returns an event-study summary for all times
+relative to intervention; otherwise, \code{times} should contain a two-element
+integer vector specifying the start and end times since intervention to be
+summarized. If \code{type} is \code{calendar} and \code{times} is unspecified, the function
+returns a summary of calendar time periods for all time periods observed;
+otherwise, \code{times} should contain a character vector naming the time
+periods to summarize.}
 }
 \value{
 data.frame
@@ -31,7 +50,15 @@ ave_coeff(sdid_hosp, coefs = select_period(sdid_hosp, period = "post"))
 
 # We could also specify the coefficients manually. Here we request the
 # average effect for Cohort 5 in the post-intervention period.
-ave_coeff(sdid_hosp, coefs = c("cohort_5:yr_2015", "cohort_5:yr_2016",
-                               "cohort_5:yr_2017", "cohort_5:yr_2018",
-                               "cohort_5:yr_2019", "cohort_5:yr_2020"))
+ave_coeff(sdid_hosp, coefs = c("cohort_X5:yr_X2015", "cohort_X5:yr_X2016",
+                               "cohort_X5:yr_X2017", "cohort_X5:yr_X2018",
+                               "cohort_X5:yr_X2019", "cohort_X5:yr_X2020"))
+
+# Request an event-study summary for the 4 time periods before intervention
+# and the 3 periods after intervention.
+ave_coeff(sdid_hosp, type = "es", times = c(-4, 3))
+
+# Request a summary of the intervention effect for 2012, 2014, 2016, and 2018.
+ave_coeff(sdid_hosp, type = "calendar",
+          times = c("2012", "2014", "2016", "2018"))
 }

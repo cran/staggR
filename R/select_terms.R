@@ -67,10 +67,10 @@ select_terms <- function(sdid, coefs = NULL, selection = NULL) {
   if(is.null(coefs) &
      !is.null(selection$times) & is.null(selection$tsi)) {
     prelim_coefs <- with(sdid$cohort, paste0(
-      var, "_", rep(selection$cohorts[selection$cohorts != ref],
-                       each = length(selection$times)),
-      ":", sdid$time$var, "_", rep(selection$times,
-                          times = length(selection$cohorts))))
+      var, "_", make.names(rep(selection$cohorts[selection$cohorts != ref],
+                               each = length(selection$times))),
+      ":", sdid$time$var, "_", make.names(rep(selection$times,
+                                              times = length(selection$cohorts)))))
     # Check that all terms appear in the list of coefficients
     if(!all(prelim_coefs %in% names(sdid$mdl$coefficients))) {
       stop("This generates named interaction terms that do not appear in the model's coefficients.")
@@ -125,10 +125,7 @@ select_terms <- function(sdid, coefs = NULL, selection = NULL) {
       stop("This generates named interaction terms that do not appear in the model's coefficients.")
     } else coefs <- prelim_coefs
 
-  }
-
-  # The user didn't specify enough values in selection list
-  else if(is.null(coefs) &
+  } else if(is.null(coefs) & # The user didn't specify enough values in selection list
           is.null(selection$times) &
           is.null(selection$tsi)) {
     stop("Must specify one of `coefs`, `times`, or `tsi`.")

@@ -28,8 +28,13 @@ detrend_factor <- function(sdid, df){
   obs_cnt$cohort <- sub(paste0(sdid$cohort$var, "_"), "", obs_cnt$cohort)
   obs_cnt$time <- sub(paste0(sdid$time$var, "_"), "", obs_cnt$time)
 
+  # Sanitize cohort and time period names in TSI data
+  tsi_dta <- sdid$tsi[!is.na(sdid$tsi$tsi),]
+  tsi_dta$cohort <- make.names(tsi_dta$cohort)
+  tsi_dta$time <- make.names(tsi_dta$time)
+
   # Merge tsis to observation counts
-  reg_sigma <- merge(sdid$tsi[!is.na(sdid$tsi$tsi),],
+  reg_sigma <- merge(tsi_dta,
                      obs_cnt, by = c("cohort", "time"),
                      all.x = TRUE)
 

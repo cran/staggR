@@ -70,15 +70,15 @@ select_period <- function(sdid, period = "post", cohorts = NULL) {
 
   # Exclude referent time periods
   for(cohort_lvl in unique(tsi$cohort)) {
-    tsi$time_ref[tsi$cohort == cohort_lvl] <- sdid$cohort$time_refs[[as.character(cohort_lvl)]]
+    tsi$time_ref[tsi$cohort == cohort_lvl] <- sdid$cohort$time_refs[[as.character(make.names(cohort_lvl))]]
   }
-  tsi <- tsi[tsi$time != tsi$time_ref,]
+  tsi <- tsi[make.names(tsi$time) != tsi$time_ref,]
 
   # Now retrieve the values of the relevant interaction terms
   tsi$coefs <- with(tsi,
-                    paste0(sdid$cohort$var, "_", cohort,
+                    paste0(sdid$cohort$var, "_", make.names(cohort),
                            ":",
-                           sdid$time$var, "_", time))
+                           sdid$time$var, "_", make.names(time)))
 
   coefs <- tsi[, "coefs"]
 

@@ -12,6 +12,11 @@
 #' summary(sdid_hosp)
 #' @exportS3Method summary sdid_mdl
 summary.sdid_mdl <- function(object, ...) {
+  # Throw a warning if 1+ NAs in coefficients
+  if(length(object$mdl$coefficients[is.na(object$mdl$coefficients)]) > 0) {
+    warning("One or more coefficients could not be estimated.")
+  }
+
   out <- list(formulas = object$formula,
               r_squared = stats::summary.lm(object$mdl)[["r.squared"]],
               adj_r_squared = stats::summary.lm(object$mdl)[["adj.r.squared"]],

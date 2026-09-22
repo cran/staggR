@@ -157,7 +157,7 @@ staggR::ave_coeff(sdid = sdid_hosp,
 
 ## -----------------------------------------------------------------------------
 (terms_custom <- staggR::select_terms(sdid = sdid_hosp,
-                                      coefs = c("cohort_5:yr_2018", "cohort_6:yr_2018")))
+                                      coefs = c("cohort_X5:yr_X2018", "cohort_X6:yr_X2018")))
 
 staggR::ave_coeff(sdid = sdid_hosp,
                   coefs = terms_custom)

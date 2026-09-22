@@ -28,9 +28,15 @@ pick_time_refs <- function(df, cohort_var, cohort_ref, time_var, intervention_va
   cohort_lvls <- sort(unique(df[[cohort_var]][df[[cohort_var]] != cohort_ref]))
   time_lvls <- sort(unique(df[[time_var]]))
 
+  # Sanitize cohort and time levels
+  cohort_lvls <- make.names(cohort_lvls, unique = TRUE)
+  time_lvls <- make.names(time_lvls)
+
   # Confirm that all non-referent cohort levels have a corresponding intervention time
   if(!all(!is.na(df[df[[cohort_var]] %in% cohort_lvls, intervention_var]))) {
-    stop(paste0("All levels of `", cohort_var, "` must have a defined value for `", intervention_var, "`."))
+    stop("All levels of `", cohort_var, "` must have a defined value for `", intervention_var, "`.\n",
+         "Check that the proper cohort referent group has been specified, either by placing it first ",
+         "in factor levels or by specifying it using the cohort_ref parameter.")
   }
 
 
@@ -55,13 +61,13 @@ pick_time_refs <- function(df, cohort_var, cohort_ref, time_var, intervention_va
       stop(paste0("If cohorts are not named according to intervention periods, ",
                   "then `intervention_var` must be specified."))
     } else {
-      if(!all(sort(unique(df[[intervention_var]])[!is.na(unique(df[[intervention_var]]))]) %in% time_lvls)) {
+      if(!all(make.names(sort(unique(df[[intervention_var]])[!is.na(unique(df[[intervention_var]]))])) %in% time_lvls)) {
         stop(paste0("All values of ", intervention_var, " must match levels of ", time_var, "."))
       } else {
         time_refs <- lapply(cohort_lvls, function(c_lvl) {
           # Identify the index of time_lvls that matches the intervention period for the
           # current cohort
-          intervention_index <- which(time_lvls == unique(df[df[[cohort_var]] == c_lvl, intervention_var]))
+          intervention_index <- which(time_lvls == unique(make.names(df[make.names(df[[cohort_var]]) == c_lvl, intervention_var])))
           time_ref <- time_lvls[[intervention_index + time_offset]]
           if(time_ref %in% time_lvls) {
             return(time_ref)

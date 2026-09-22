@@ -4,13 +4,31 @@
 \alias{prep_data}
 \title{Prepare a data frame to work with sdid() function}
 \usage{
-prep_data(df, cohort_var, cohort_ref = NULL, time_var, time_ref = NULL)
+prep_data(
+  df,
+  y,
+  intervention_var,
+  cohort_var,
+  covariates = NULL,
+  cohort_ref = NULL,
+  time_var,
+  weights = NULL
+)
 }
 \arguments{
 \item{df}{A data frame containing the variables in the model.}
 
+\item{y}{Name of outcome variable in `df.}
+
+\item{intervention_var}{Name of the cohort-level variable in \code{df} that
+specifies which values in \code{time_var} correspond to the first
+post-intervention time period for each cohort.}
+
 \item{cohort_var}{String specifying the name of the column in \code{df} that
 defines the intervention cohorts.}
+
+\item{covariates}{Character vector containing the names of covariates to
+adjust the regression.}
 
 \item{cohort_ref}{An optional string specifying the value of \code{cohort_var}
 to be used as the referent in the model. If not specified, the value is taken
@@ -19,8 +37,8 @@ from the first observed value in \code{cohort_var}.}
 \item{time_var}{String specifying the name of the column in \code{df} that defines
 time periods over the study.}
 
-\item{time_ref}{An optional string specifying the value of \code{time_var} to be
-used as the referent in the model.}
+\item{weights}{Optional column name containing the counts of observations to
+be used as regression weights.}
 }
 \value{
 data.frame
@@ -30,9 +48,10 @@ Prepare a data frame to work with sdid() function
 }
 \examples{
 dta_prepped <- prep_data(hosp,
+                         y = "hospitalized",
+                         intervention_var = "intervention_yr",
                          cohort_var = "cohort",
                          cohort_ref = "0",
-                         time_var = "yr",
-                         time_ref = "2010")
+                         time_var = "yr")
 head(dta_prepped)
 }
